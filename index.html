@@ -1,19 +1,437 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Voice Timer</title>
-  <link rel="stylesheet" href="style.css">
-</head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Focus Timer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    body {
+      height: 100vh;
+      background: #0a0a0a;
+      color: #f0ece4;
+      font-family: 'Space Mono', monospace;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    /* Subtle grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      opacity: 0.35;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+
+    h1 {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: #f0ece4;
+      opacity: 0.35;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+
+    #time {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(90px, 20vw, 160px);
+      line-height: 1;
+      letter-spacing: 4px;
+      color: #f0ece4;
+      transition: color 0.4s ease;
+    }
+
+    #time.ticking {
+      color: #e8d5b0;
+    }
+
+    /* Quote area */
+    #quote-box {
+      height: 52px;
+      margin-top: 20px;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: min(480px, 90vw);
+      position: relative;
+    }
+
+    #quote-text {
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      line-height: 1.7;
+      color: #c8bfb0;
+      text-align: center;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+      text-transform: uppercase;
+    }
+
+    #quote-text.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #quote-text.fading {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+
+    /* Progress bar */
+    #progress-track {
+      width: min(280px, 80vw);
+      height: 1px;
+      background: rgba(240, 236, 228, 0.1);
+      margin-bottom: 40px;
+      position: relative;
+      overflow: visible;
+    }
+
+    #progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #e8d5b0;
+      transition: width 1s linear;
+    }
+
+    #progress-dot {
+      position: absolute;
+      top: 50%;
+      left: 0%;
+      transform: translate(-50%, -50%);
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #e8d5b0;
+      transition: left 1s linear;
+    }
+
+    button {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      padding: 14px 36px;
+      border: 1px solid rgba(240, 236, 228, 0.3);
+      background: transparent;
+      color: #f0ece4;
+      cursor: pointer;
+      transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+      position: relative;
+    }
+
+    button:hover {
+      background: #f0ece4;
+      color: #0a0a0a;
+      border-color: #f0ece4;
+    }
+
+    button.running {
+      border-color: rgba(240, 236, 228, 0.15);
+      color: rgba(240, 236, 228, 0.4);
+    }
+
+    button.running:hover {
+      background: rgba(240, 236, 228, 0.08);
+      color: rgba(240, 236, 228, 0.7);
+      border-color: rgba(240, 236, 228, 0.3);
+    }
+
+    /* Pulse ring on tick */
+    @keyframes pulse-ring {
+      0% { transform: scale(1); opacity: 0.15; }
+      100% { transform: scale(1.08); opacity: 0; }
+    }
+
+    .pulse {
+      animation: pulse-ring 0.4s ease-out;
+    }
+  </style>
+</head>
 <body>
 
 <div class="container">
-  <h1>FOCUS TIMER</h1>
+  <h1>Focus Timer</h1>
   <div id="time">00:00</div>
-  <button onclick="startTimer()">Start</button>
+
+  <div id="quote-box">
+    <div id="quote-text"></div>
+  </div>
+
+  <div id="progress-track">
+    <div id="progress-fill"></div>
+    <div id="progress-dot"></div>
+  </div>
+
+  <button id="btn" onclick="toggleTimer()">Start</button>
 </div>
 
-<script src="script.js"></script>
+<script>
+  let seconds = 0;
+  let interval = null;
+  let running = false;
+
+  // Voice messages at exact second marks
+  const voiceMessages = {
+    5: "You started.",
+    15: "Stay here.",
+    30: "Don't switch.",
+    45: "Mind will wander. Ignore it.",
+    60: "Good. You crossed the first minute.",
+    120: "Still here. That matters.",
+    180: "Focus is forming.",
+    240: "Don't check your phone.",
+    300: "You broke friction.",
+    420: "Now it becomes easier.",
+    600: "You are working, not starting.",
+    720: "Stay steady.",
+    900: "Most people quit before this.",
+    1080: "You are gaining control.",
+    1200: "Stay locked in.",
+    1320: "No distractions.",
+    1500: "You killed one pomodoro.",
+    1800: "Half hour done. Strong work.",
+    2100: "You are ahead of your past self.",
+    2400: "This is real discipline.",
+    2700: "Stay calm. Stay focused.",
+    3000: "Don't slow down.",
+    3300: "One hour is close.",
+    3600: "One hour complete. Respect.",
+    3900: "Most people would stop.",
+    4200: "You continue. That's rare.",
+    4500: "Stay focused.",
+    4800: "Fatigue is normal. Ignore it.",
+    5100: "You are stronger than your excuses.",
+    5400: "Ninety minutes. Elite zone.",
+    5700: "Keep pushing.",
+    6000: "You are not average right now.",
+    6300: "This is how toppers work.",
+    6600: "Almost there.",
+    6900: "Finish strong.",
+    7200: "Two hours complete. You dominated."
+  };
+
+  // Visual motivational quotes — shown every 30 seconds
+  const motivationalQuotes = [
+    "Discipline is choosing what you want most over what you want now.",
+    "The mind is everything. What you think, you become.",
+    "Work while they sleep. Learn while they party. Save while they spend.",
+    "Pain is temporary. Quitting lasts forever.",
+    "You don't rise to the level of your goals. You fall to the level of your systems.",
+    "Consistency is what transforms average into excellence.",
+    "Hard work beats talent when talent doesn't work hard.",
+    "The secret of getting ahead is getting started.",
+    "Do something today your future self will thank you for.",
+    "Suffer the pain of discipline or the pain of regret.",
+    "Success is the sum of small efforts repeated day in and day out.",
+    "Focused, consistent effort beats scattered brilliance every time.",
+    "Stop waiting for motivation. Start building momentum.",
+    "Every expert was once a beginner who refused to quit.",
+    "Your future is created by what you do today, not tomorrow.",
+    "The only way out is through.",
+    "Comfort is the enemy of progress.",
+    "Be so good they can't ignore you.",
+    "Champions aren't made in gyms. They're made from something deep inside.",
+    "You are one decision away from a completely different life.",
+    "It always seems impossible until it's done.",
+    "Push yourself, because no one else is going to do it for you.",
+    "The pain you feel today is the strength you'll feel tomorrow.",
+    "Focus on the step in front of you, not the whole staircase."
+  ];
+
+  let quoteIndex = 0;
+  let quoteTimer = null;
+  let maleVoice = null;
+
+  // Load voices and pick best male voice
+  function loadMaleVoice() {
+    const voices = speechSynthesis.getVoices();
+    if (!voices.length) return;
+
+    // Priority: known deep/male English voices by name
+    const malePriority = [
+      'Google UK English Male',
+      'Microsoft David Desktop',
+      'Microsoft Mark Desktop',
+      'Alex', // macOS
+      'Daniel', // macOS UK male
+      'Fred', // macOS
+      'Ralph', // macOS
+      'Albert', // macOS
+      'Bruce', // macOS
+    ];
+
+    for (const name of malePriority) {
+      const match = voices.find(v => v.name === name);
+      if (match) { maleVoice = match; return; }
+    }
+
+    // Fallback: any voice with 'male' in the name
+    const byKeyword = voices.find(v => v.name.toLowerCase().includes('male'));
+    if (byKeyword) { maleVoice = byKeyword; return; }
+
+    // Last resort: pick a non-female English voice
+    const nonFemale = voices.find(v =>
+      v.lang.startsWith('en') &&
+      !v.name.toLowerCase().includes('female') &&
+      !v.name.toLowerCase().includes('zira') &&
+      !v.name.toLowerCase().includes('hazel') &&
+      !v.name.toLowerCase().includes('susan') &&
+      !v.name.toLowerCase().includes('karen') &&
+      !v.name.toLowerCase().includes('moira') &&
+      !v.name.toLowerCase().includes('samantha') &&
+      !v.name.toLowerCase().includes('victoria') &&
+      !v.name.toLowerCase().includes('fiona')
+    );
+    if (nonFemale) maleVoice = nonFemale;
+  }
+
+  // Voices load async in most browsers
+  speechSynthesis.onvoiceschanged = loadMaleVoice;
+  loadMaleVoice();
+
+  // ── Speech queue ──────────────────────────────────────────────
+  // Never cancels mid-sentence. Each item waits for the previous to finish.
+  const speechQueue = [];
+  let isSpeaking = false;
+
+  function processQueue() {
+    if (isSpeaking || speechQueue.length === 0) return;
+    isSpeaking = true;
+    const text = speechQueue.shift();
+    const msg = new SpeechSynthesisUtterance(text);
+    if (maleVoice) msg.voice = maleVoice;
+    msg.pitch = 0.85;
+    msg.rate = 0.95;
+    msg.onend = () => { isSpeaking = false; processQueue(); };
+    msg.onerror = () => { isSpeaking = false; processQueue(); };
+    speechSynthesis.speak(msg);
+  }
+
+  function speak(text) {
+    speechQueue.push(text);
+    processQueue();
+  }
+
+  function clearSpeech() {
+    speechQueue.length = 0;
+    isSpeaking = false;
+    speechSynthesis.cancel();
+  }
+  // ──────────────────────────────────────────────────────────────
+
+  function showQuote(text) {
+    const el = document.getElementById('quote-text');
+    el.classList.remove('visible');
+    el.classList.add('fading');
+    setTimeout(() => {
+      el.textContent = text;
+      el.classList.remove('fading');
+      el.classList.add('visible');
+    }, 600);
+  }
+
+  function scheduleNextQuote() {
+    quoteTimer = setTimeout(() => {
+      if (!running) return;
+      const quote = motivationalQuotes[quoteIndex % motivationalQuotes.length];
+      showQuote(quote);
+      speak(quote);
+      quoteIndex++;
+      scheduleNextQuote();
+    }, 30000);
+  }
+
+  function toggleTimer() {
+    if (!running) {
+      startTimer();
+    } else {
+      stopTimer();
+    }
+  }
+
+  function startTimer() {
+    running = true;
+    seconds = 0;
+    quoteIndex = 0;
+
+    const btn = document.getElementById('btn');
+    btn.textContent = 'Stop';
+    btn.classList.add('running');
+
+    document.getElementById('time').classList.add('ticking');
+
+    // Show first quote after 30s
+    scheduleNextQuote();
+
+    interval = setInterval(() => {
+      seconds++;
+
+      let mins = Math.floor(seconds / 60);
+      let secs = seconds % 60;
+      document.getElementById('time').innerText =
+        String(mins).padStart(2, '0') + ':' +
+        String(secs).padStart(2, '0');
+
+      // Progress bar cycles every 60 seconds
+      const cyclePos = (seconds % 60) / 60 * 100;
+      document.getElementById('progress-fill').style.width = cyclePos + '%';
+      document.getElementById('progress-dot').style.left = cyclePos + '%';
+
+      if (voiceMessages[seconds]) {
+        speak(voiceMessages[seconds]);
+      }
+
+    }, 1000);
+  }
+
+  function stopTimer() {
+    running = false;
+    clearInterval(interval);
+    clearTimeout(quoteTimer);
+    interval = null;
+
+    clearSpeech();
+
+    const btn = document.getElementById('btn');
+    btn.textContent = 'Restart';
+    btn.classList.remove('running');
+
+    document.getElementById('time').classList.remove('ticking');
+    document.getElementById('progress-fill').style.width = '0%';
+    document.getElementById('progress-dot').style.left = '0%';
+
+    const el = document.getElementById('quote-text');
+    el.classList.remove('visible');
+    el.classList.add('fading');
+    setTimeout(() => {
+      el.textContent = '';
+      el.classList.remove('fading');
+    }, 600);
+  }
+</script>
 
 </body>
 </html>
